@@ -4,10 +4,15 @@ using System.Management;
 using System.Text;
 
 static string WmiRunner(string wmiClass, string[] props, bool newLine = true) {
+    return ScopedWmiRunner(null, wmiClass, props, newLine);
+}
+
+static string ScopedWmiRunner(string scope, string wmiClass, string[] props, bool newLine = true)
+{
     string output = "";
     try
     {
-        var search = new ManagementObjectSearcher($"select * from {wmiClass}");
+        var search = (String.IsNullOrEmpty(scope)) ? new ManagementObjectSearcher($"select * from {wmiClass}") : new ManagementObjectSearcher(scope, $"select * from {wmiClass}");
         int count = 0;
         foreach (ManagementObject obj in search.Get())
         {
@@ -16,7 +21,7 @@ static string WmiRunner(string wmiClass, string[] props, bool newLine = true) {
                 output += $"{count}: ";
                 count++;
             }
-            if (obj.Properties.Count <= 0) throw new Exception();
+            if (obj.Properties.Count <= 0) throw new Exception($"No {wmiClass} objects");
             foreach (var property in obj.Properties)
             {
                 if (props.Length > 0 && !props.Contains(property.Name)) continue;
@@ -27,9 +32,9 @@ static string WmiRunner(string wmiClass, string[] props, bool newLine = true) {
             if (!newLine) output += "\r\n";
         }
     }
-    catch
+    catch (Exception ex)
     {
-        output = $"Cannot get {wmiClass}";
+        output = ex.ToString();
     }
     return output;
 }
@@ -38,7 +43,7 @@ string sysInfo = WmiRunner("Win32_ComputerSystem", new string[] { "Domain", "Man
 string cpuInfo = WmiRunner("Win32_Processor", new string[] { "Description", "Name", "NumberOfCores", "NumberOfLogicalProcessors" });
 string gpuInfo = WmiRunner("Win32_VideoController", new string[] { "Name", "ConfiguredClockSpeed", "Capacity" });
 string ramInfo = WmiRunner("win32_PhysicalMemory", new string[] { "PartNumber", "ConfiguredClockSpeed", "Capacity" }, false);
-string tpmInfo = WmiRunner("Win32_Tpm", new string[] { });
+string tpmInfo = ScopedWmiRunner("root\\cimv2\\security\\microsofttpm", "Win32_Tpm", new string[] { });
 string mboInfo = WmiRunner("Win32_BaseBoard", new string[] { "Manufacturer", "Product" });
 string diskInfo = WmiRunner("Win32_DiskDrive", new string[] { "Model", "Size" });
 string netInfo = WmiRunner("Win32_NetworkAdapterConfiguration", new string[] { "Description" });
@@ -62,9 +67,10 @@ try
     Console.WriteLine("Compiling Data...");
 
     string compiledData = $"--- System Info: ---\r\n{sysInfo}\r\n{osInfo}\r\n" +
-    $"--- Hardware Info: ---\r\n{cpuInfo}\r\n{ramInfo}\r\n{gpuInfo}\r\n{tpmInfo}\r\n{mboInfo}\r\n" +
-    $"--- Disk Info: ---\r\n{diskInfo}\r\n" +
-    $"--- Net Info: ---\r\n{netInfo}\r\n";
+    $"\r\n--- Hardware Info: ---\r\n{cpuInfo}\r\n{ramInfo}\r\n{gpuInfo}\r\n{mboInfo}\r\n" +
+    $"\r\n--- TPM Info: ---\r\n{tpmInfo}\r\n" +
+    $"\r\n--- Disk Info: ---\r\n{diskInfo}\r\n" +
+    $"\r\n--- Net Info: ---\r\n{netInfo}\r\n";
 
     Console.WriteLine("Sending Data...");
     byte[] dataArray = Encoding.ASCII.GetBytes(compiledData);
